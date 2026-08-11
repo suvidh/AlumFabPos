@@ -1,0 +1,72 @@
+{
+  "name": "hardware_app",
+  "private": true,
+  "version": "1.0.0",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "dev": "vite",
+    "electron:dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "package": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.alumfab.pos",
+    "productName": "ALUMFAB POS",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      "prisma/pos.db"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.0",
+    "canvas-confetti": "^1.9.4",
+    "cors": "^2.8.6",
+    "dexie": "^4.4.4",
+    "dexie-react-hooks": "^4.4.0",
+    "express": "^5.2.1",
+    "lucide-react": "^1.30.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.2.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "adm-zip": "^0.6.0",
+    "autoprefixer": "^10.5.4",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "fods": "^2.3.0",
+    "oxlint": "^1.75.0",
+    "postcss": "^8.5.26",
+    "prisma": "^6.4.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vite-plugin-electron": "^1.1.1",
+    "vite-plugin-electron-renderer": "^1.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

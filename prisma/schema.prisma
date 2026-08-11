@@ -1,0 +1,325 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum SellingUnit {
+  KG
+  PCS
+  FT
+  METER
+  LENGTH
+  SET
+  RFT
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+}
+
+enum StockMovementType {
+  OPENING_STOCK
+  PURCHASE
+  SALE
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model AppMeta {
+  id            Int      @id @default(1)
+  schemaVersion Int      @default(2)
+  appVersion    String?  @default("1.0.0")
+  initializedAt DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Company {
+  id              String   @id @default(cuid())
+  name            String
+  legalName       String?
+  taxId           String?  // GSTIN
+  phone           String?
+  email           String?
+  state           String?
+  address         String?
+  defaultLogoPath String?
+  defaultBranchId String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branches        Branch[]
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  code          String   @unique
+  name          String
+  address       String?
+  gstin         String?
+  phone         String?
+  state         String?
+  invoicePrefix String?  @default("INV-")
+  logoPath      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  inventories      BranchInventory[]
+  sales            Sale[]
+  stockMovements   StockMovement[]
+  invoiceSequences InvoiceSequence[]
+  purchases        Purchase[]
+  expenses         Expense[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products  Product[]
+}
+
+model Product {
+  id                  String      @id @default(cuid())
+  sku                 String      @unique
+  name                String
+  barcode             String?     @unique
+  categoryId          String?
+  category            Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand               String?
+  profile             String?
+  size                String?
+  finish              String?
+  sellingUnit         SellingUnit @default(PCS)
+  sourceUnit          String?     // Raw source unit string e.g. "RFT", "PCS"
+  sellingPricePaise   Int         // GST-Inclusive Price in Paise (₹1 = 100 paise)
+  weightPerPieceMilli Int?        // Weight in Milli-units (1 Kg = 1000 milli-units)
+  lengthMilli         Int?        // Length in Milli-units (1 FT = 1000 milli-units)
+  minimumStockMilli   Int?        @default(0) // Minimum reorder stock level
+  isActive            Boolean     @default(true)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  inventories    BranchInventory[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
+  purchaseItems  PurchaseItem[]
+}
+
+model BranchInventory {
+  id            String   @id @default(cuid())
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityMilli Int      @default(0) // Stock quantity in milli-units (1 unit = 1000 milli-units)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([branchId, productId])
+}
+
+model StockMovement {
+  id            String            @id @default(cuid())
+  branchId      String
+  branch        Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId     String
+  product       Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  type          StockMovementType
+  quantityMilli Int               // Positive magnitude in milli-units (Direction decided by type)
+  referenceType String?           // e.g. "SALE", "ADJUSTMENT"
+  referenceId   String?           // e.g. Sale ID or Audit Reference
+  notes         String?
+  createdAt     DateTime          @default(now())
+
+  @@index([branchId, productId, createdAt])
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  address   String?
+  gstin     String?
+  state     String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales     Sale[]
+}
+
+model InvoiceSequence {
+  id        String   @id @default(cuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  prefix    String
+  nextNumber Int     @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, prefix])
+}
+
+model Sale {
+  id                       String        @id @default(cuid())
+  invoiceNumber            String        @unique
+  invoiceSequence          Int
+  branchId                 String
+  branch                   Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId               String?
+  customer                 Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  branchNameSnapshot       String        // Immutable Historical Branch Snapshot
+  branchAddressSnapshot    String?
+  branchGstinSnapshot      String?
+  branchPhoneSnapshot      String?
+  branchStateSnapshot      String?
+  customerNameSnapshot     String        // Immutable Historical Customer Identity Snapshot
+  customerAddressSnapshot  String?
+  customerGstinSnapshot    String?
+  customerStateSnapshot    String?
+  subtotalPaise            Int           // Subtotal in paise
+  discountType             DiscountType?
+  discountValueBasisPoints Int?          // Percentage basis points e.g. 1000 = 10%
+  discountPaise            Int           @default(0) // Fixed or calculated discount in paise
+  discountNote             String?
+  grandTotalPaise          Int           // Final GST-Inclusive grand total in paise
+  createdAt                DateTime      @default(now())
+  updatedAt                DateTime      @updatedAt
+
+  items                    SaleItem[]
+  payments                 Payment[]
+}
+
+model SaleItem {
+  id                  String      @id @default(cuid())
+  saleId              String
+  sale                Sale        @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
+  skuSnapshot         String?     // Immutable Historical Product SKU Snapshot
+  productNameSnapshot String      // Immutable Historical Product Name Snapshot
+  profileSnapshot     String?     // Immutable Historical Profile Snapshot
+  unitSnapshot        SellingUnit // Immutable Historical Selling Unit
+  quantityMilli       Int         // Quantity in Milli-units
+  ratePaise           Int         // GST-Inclusive Unit Price in Paise
+  grossPaise          Int         // Gross line total in paise (ratePaise * quantityMilli / 1000)
+  discountPaise       Int         @default(0) // Line discount in paise
+  lineTotalPaise      Int         // Final Line Total in Paise
+  createdAt           DateTime    @default(now())
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  saleId       String
+  sale         Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  method       PaymentMethod
+  amountPaise  Int           // Must equal Sale.grandTotalPaise for full payment rule
+  chequeNumber String?       // Required if method == CHEQUE, must be null if CASH
+  createdAt    DateTime      @default(now())
+}
+
+model BackupMetadata {
+  id        String   @id @default(cuid())
+  filename  String
+  filepath  String
+  sizeBytes Int
+  backupType String  @default("MANUAL") // MANUAL, AUTOMATIC
+  status    String   @default("SUCCESS") // SUCCESS, FAILED
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  entityType  String?
+  entityId    String?
+  detailsJson String?
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Supplier {
+  id        String     @id @default(cuid())
+  name      String
+  phone     String?
+  address   String?
+  gstin     String?
+  notes     String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  purchases Purchase[]
+}
+
+model Purchase {
+  id              String         @id @default(cuid())
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  referenceNumber String?
+  date            DateTime       @default(now())
+  totalPaise      Int
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  items           PurchaseItem[]
+}
+
+model PurchaseItem {
+  id             String   @id @default(cuid())
+  purchaseId     String
+  purchase       Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityMilli  Int
+  ratePaise      Int
+  lineTotalPaise Int
+  createdAt      DateTime @default(now())
+}
+
+model Expense {
+  id                  String   @id @default(cuid())
+  branchId            String
+  branch              Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  date                DateTime @default(now())
+  categoryDescription String
+  amountPaise         Int
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
