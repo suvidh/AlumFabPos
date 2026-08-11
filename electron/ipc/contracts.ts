@@ -1,7 +1,7 @@
 import { 
   Company, Branch, Product, BranchInventory, 
   Customer, Sale, StockMovement, PaymentMethod, 
-  DiscountType, StockMovementType, SellingUnit, User,
+  DiscountType, StockMovementType, SellingUnit,
   Supplier, Purchase, Expense, Category
 } from '@prisma/client';
 
@@ -241,10 +241,6 @@ export interface AlumfabAPI {
     notes?: string;
   }) => Promise<Expense>;
   getAllExpenses: (branchId?: string) => Promise<Expense[]>;
-
-  // Auth Methods
-  login: (username: string, password: string) => Promise<Omit<User, 'passwordHash'>>;
-  updatePassword: (userId: string, oldPassword: string, newPassword: string) => Promise<boolean>;
 
   // Product Import Pipeline Methods
   /** Returns the default expected path of the ODS file (read-only source) */

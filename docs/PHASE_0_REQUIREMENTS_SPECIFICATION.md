@@ -82,19 +82,11 @@ flowchart TD
 
 ---
 
-## 4. Single-Role User Access Model
+## 4. User Access Model
 
-Version 1 enforces a single-role security model:
+Version 1 uses a **direct-access model** — the application launches immediately into the POS interface with no login screen or authentication gate. This is appropriate for a single-machine, single-operator local desktop deployment.
 
-### 4.1 Role: `ADMIN`
-The `ADMIN` role possesses full operational access:
-* System Login.
-* Product Master & Category Management.
-* Opening Stock Entry & Inventory Movements.
-* Sales Billing, Manual Discounts & Price Overrides.
-* Customer Directory Management.
-* Sales History Audit Logs & Invoice Printing.
-* Local Database Backup & Restore operations.
+> 🛑 Login / Authentication is **explicitly out of scope for V1**. The `ADMIN` concept exists at the data/role level for future multi-user expansion but no login UI, password storage, or session management is implemented in V1.
 
 ---
 
@@ -184,8 +176,8 @@ If stock is insufficient:
 ## 8. POS Sales Workflow & Payment Processing
 
 ### 8.1 Workflow Execution Steps
-1. **Admin Login** -> Launch POS Terminal.
-2. **Select/Create Customer** -> Default or custom customer details.
+1. **Launch App** → Direct access to POS Terminal (no login required).
+2. **Select/Create Customer** → Default or custom customer details.
 3. **Search & Add Product** -> Search by Name, SKU, Profile, or Size.
 4. **Enter Quantity** -> Quantity input based on selling unit (`KG`, `PCS`, `FT`, `METER`).
 5. **Adjust Pricing / Discount** -> Apply authorized manual price adjustment or manual discount.

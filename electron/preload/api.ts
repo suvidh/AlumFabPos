@@ -171,17 +171,6 @@ export const alumfabAPI: AlumfabAPI = {
       ? ipcRenderer!.invoke(IPC_CHANNELS.SALE_GET_ALL, { branchId })
       : http('GET', `/sales${branchId ? `?branchId=${branchId}` : ''}`),
 
-  // ── Auth ────────────────────────────────────────────────────────────────
-  login: (username, password) =>
-    IS_ELECTRON
-      ? ipcRenderer!.invoke(IPC_CHANNELS.AUTH_LOGIN, { username, password })
-      : http('POST', '/auth/login', { username, password }),
-
-  updatePassword: (userId, oldPassword, newPassword) =>
-    IS_ELECTRON
-      ? ipcRenderer!.invoke(IPC_CHANNELS.AUTH_UPDATE_PASSWORD, { userId, oldPassword, newPassword })
-      : http('POST', '/auth/update-password', { userId, oldPassword, newPassword }),
-
   // ── Suppliers ───────────────────────────────────────────────────────────
   getAllSuppliers: (includeInactive) =>
     IS_ELECTRON

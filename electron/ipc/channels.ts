@@ -35,10 +35,6 @@ export const IPC_CHANNELS = {
   SALE_CREATE: 'sale:create',
   SALE_GET_ALL: 'sale:get-all',
 
-  // Auth Channels
-  AUTH_LOGIN: 'auth:login',
-  AUTH_UPDATE_PASSWORD: 'auth:update-password',
-
   // Supplier, Purchase, and Expense Channels
   SUPPLIER_GET_ALL: 'supplier:get-all',
   SUPPLIER_CREATE: 'supplier:create',

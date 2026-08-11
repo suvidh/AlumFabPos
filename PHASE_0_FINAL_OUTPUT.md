@@ -24,7 +24,6 @@
 
 # B. VERSION 1 FEATURES (IN-SCOPE)
 
-* **Admin Authentication**: Local login and credential management.
 * **Product & Category Master**: Manage products, categories, brands, profiles, finishes, and selling units.
 * **Excel / CSV Product Dataset Import**: Bulk product dataset import with pre-import validation and error report generation.
 * **Multi-Unit Inventory Engine**: Native support for `KG`, `PCS`, `FT`, `METER`, `LENGTH`, `SET`.
@@ -45,6 +44,7 @@
 
 # C. DEFERRED FEATURES (OUT-OF-SCOPE FOR VERSION 1)
 
+* 🛑 **Login / Authentication**: No login screen or password gate. The application boots directly into the POS interface for single-machine, single-operator local desktop use.
 * 🛑 **Quotation Module**: Quotation UI screens, forms, tables, and conversion workflows are EXCLUDED in V1 (architecture decoupled for future implementation).
 * 🛑 **Customer Credit / Khata**: Customer credit limits, outstanding balances, partial payments, payment installments, and credit ledgers are EXCLUDED.
 * 🛑 **Digital Payments**: UPI, QR codes, Credit/Debit Cards, Net Banking, and Wallets are EXCLUDED.
@@ -98,8 +98,8 @@ graph TD
 
 # E. CORE WORKFLOWS
 
-## 1. Login Flow
-Admin Launches App -> System connects to `%APPDATA%/ALUMFAB-POS/database/alumfab_pos.db` -> Admin inputs credentials -> Access granted.
+## 1. Application Launch
+App boots directly into POS Terminal → System connects to `%APPDATA%/ALUMFAB-POS/database/alumfab_pos.db` → Ready for use. No login required.
 
 ## 2. Product Import Validation Flow
 Admin selects Excel/CSV dataset -> System parses rows -> Runs validation check -> If errors exist: generates Import Validation Report & rejects import -> If valid: bulk writes products and opening stock movements.
@@ -108,7 +108,7 @@ Admin selects Excel/CSV dataset -> System parses rows -> Runs validation check -
 Admin selects Product -> Chooses Movement Type (`OPENING_STOCK`, `PURCHASE`, `ADJUSTMENT_IN`, `ADJUSTMENT_OUT`) -> Enters Quantity -> Writes `StockMovement` ledger -> Atomically updates `products.currentStock`.
 
 ## 4. Sales Counter Flow
-Admin opens POS Terminal -> Selects Customer -> Searches Product (`F2`) -> Enters Quantity -> Applies manual price adjustment or discount (%, ₹) -> System validates stock (`currentStock >= saleQty`) -> Computes integer paise tax -> Proceeds to Checkout (`F8`).
+Admin opens POS Terminal → Selects Customer → Searches Product (`F2`) → Enters Quantity → Applies manual price adjustment or discount (%, ₹) → System validates stock (`currentStock >= saleQty`) → Computes integer paise tax → Proceeds to Checkout (`F8`).
 
 ## 5. Cash Payment Flow
 Select `CASH` -> Confirm amount due -> Execute Atomic ACID Transaction.
@@ -398,7 +398,7 @@ All 16 mandatory acceptance criteria specified in Section 26 have been verified 
 
 - [x] **1. Business Type Documentation**: Documented as bulk aluminum profiles and aluminum hardware trading.
 - [x] **2. Offline Requirement**: Fixed to 100% offline Windows desktop application with local SQLite database in `%APPDATA%`.
-- [x] **3. User Model**: Fixed to single `ADMIN` role with full unrestricted authority.
+- [x] **3. User Model**: Fixed to single-operator direct access model. No login / authentication screen in V1. Admin has full unrestricted authority.
 - [x] **4. Product Unit Model**: Fixed to support `KG`, `PCS`, `FT`, `METER`, `LENGTH`, `SET`.
 - [x] **5. Pricing Strategy**: Fixed to dataset source of truth, integer paise units, and reverse GST calculations.
 - [x] **6. Manual Discount Rules**: Fixed to percentage (%) and fixed amount (₹) manual discounts applied at checkout.

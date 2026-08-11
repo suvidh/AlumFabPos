@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Package, Layers, 
-  Users, FileText, BarChart3, Settings, ShieldCheck, Cpu, LogOut
+  Users, FileText, BarChart3, Settings, ShieldCheck, Cpu, UserCheck
 } from 'lucide-react';
 import { DashboardPage } from '../pages/DashboardPage';
 import { BillingPage } from '../pages/BillingPage';
@@ -11,31 +11,13 @@ import { CustomersPage } from '../pages/CustomersPage';
 import { SalesPage } from '../pages/SalesPage';
 import { ReportsPage } from '../pages/ReportsPage';
 import { SettingsPage } from '../pages/SettingsPage';
-import { LoginPage } from '../pages/LoginPage';
+import { useUser } from '../context/UserContext';
 
 export type NavTab = 'dashboard' | 'billing' | 'products' | 'inventory' | 'customers' | 'sales' | 'reports' | 'settings';
 
 export const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('admin_authenticated') === 'true';
-  });
-  const [currentUser, setCurrentUser] = useState<any>(() => {
-    const saved = sessionStorage.getItem('admin_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const handleLoginSuccess = (user: any) => {
-    setCurrentUser(user);
-    setIsAuthenticated(true);
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem('admin_authenticated');
-    sessionStorage.removeItem('admin_user');
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-  };
+  const { user } = useUser();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -47,10 +29,6 @@ export const MainLayout: React.FC = () => {
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
-
-  if (!isAuthenticated) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
-  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0f172a', color: '#f8fafc' }}>
@@ -111,28 +89,24 @@ export const MainLayout: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <button
-            onClick={handleLogout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '0.65rem 0.85rem',
-              borderRadius: '6px',
-              border: '1px solid #334155',
-              backgroundColor: '#1e293b',
-              color: '#ef4444',
-              fontWeight: 600,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              textAlign: 'left',
-              width: '100%',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <LogOut style={{ width: 18, height: 18 }} />
-            Sign Out
-          </button>
+          {/* Operator Info Pill */}
+          <div style={{
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '6px',
+            padding: '0.65rem',
+            fontSize: '0.75rem',
+            color: '#cbd5e1',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <UserCheck style={{ width: 16, height: 16, color: '#38bdf8' }} />
+            <div>
+              <div style={{ fontWeight: 600, color: '#f8fafc' }}>{user.name}</div>
+              <div style={{ fontSize: '0.68rem', color: '#38bdf8', textTransform: 'uppercase' }}>Role: {user.role}</div>
+            </div>
+          </div>
 
           {/* Footer Status Pill */}
           <div style={{

@@ -45,7 +45,7 @@ hardware_app/
 ## 🔒 Version 1 Locked Business Scope & Rules
 
 ### ✅ Included in Version 1:
-* Single `ADMIN` Role with full system access.
+* Direct-access launch — no login screen or authentication gate.
 * Excel / CSV / ODS Product Dataset Import & Error Validation.
 * Multi-Unit Inventory Engine (`KG`, `PCS`, `FT`, `METER`, `LENGTH`, `SET`).
 * Opening Stock Setup & Stock Movements Ledger.
@@ -60,6 +60,7 @@ hardware_app/
 * Manual & Auto Daily Database Backup + Pre-Restore Safety Snapshot Protection.
 
 ### 🛑 Excluded from Version 1:
+* No Login Screen / Authentication (app launches directly into POS interface).
 * No Quotation Module UI (Architecture decoupled for future addition).
 * No Customer Credit Limits, Outstanding Balances, Partial Payments, or Khata Ledgers.
 * No Digital Payments (UPI, QR Codes, Cards, Net Banking, Wallets).

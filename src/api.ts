@@ -31,7 +31,6 @@ import type {
   Sale, 
   StockMovement, 
   StockMovementType,
-  User,
   Supplier,
   Purchase,
   Expense,
@@ -194,12 +193,6 @@ const httpAPI: AlumfabAPI = {
   }) => http<Sale>('POST', '/sales', data),
   getAllSales:           (branchId?: string) =>
     http<Sale[]>('GET', `/sales${branchId ? `?branchId=${branchId}` : ''}`),
-
-  // Auth
-  login:                 (username: string, password: string) =>
-    http<Omit<User, 'passwordHash'>>('POST', '/auth/login', { username, password }),
-  updatePassword:        (userId: string, oldPassword: string, newPassword: string) =>
-    http<boolean>('POST', '/auth/update-password', { userId, oldPassword, newPassword }),
 
   // Supplier
   getAllSuppliers:       (includeInactive?: boolean) =>

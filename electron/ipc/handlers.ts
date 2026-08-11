@@ -11,7 +11,6 @@ import { CategoryService } from '../../src/services/categoryService';
 import { InventoryService } from '../../src/services/inventoryService';
 import { CustomerService } from '../../src/services/customerService';
 import { SalesService } from '../../src/services/salesService';
-import { AuthService } from '../../src/services/authService';
 import { SupplierService } from '../../src/services/supplierService';
 import { PurchaseService } from '../../src/services/purchaseService';
 import { ExpenseService } from '../../src/services/expenseService';
@@ -126,17 +125,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SALE_GET_ALL, async (_, { branchId }) => {
     const client = DatabaseService.getClient();
     return SalesService.getAllSales(client, branchId);
-  });
-
-  // Auth Handlers
-  ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (_, { username, password }) => {
-    const client = DatabaseService.getClient();
-    return AuthService.login(client, username, password);
-  });
-
-  ipcMain.handle(IPC_CHANNELS.AUTH_UPDATE_PASSWORD, async (_, { userId, oldPassword, newPassword }) => {
-    const client = DatabaseService.getClient();
-    return AuthService.updatePassword(client, userId, oldPassword, newPassword);
   });
 
   // Supplier Domain Handlers

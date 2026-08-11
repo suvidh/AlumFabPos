@@ -13,7 +13,6 @@ import { InventoryService } from '../../src/services/inventoryService';
 import { CustomerService } from '../../src/services/customerService';
 import { CategoryService } from '../../src/services/categoryService';
 import { SalesService } from '../../src/services/salesService';
-import { AuthService } from '../../src/services/authService';
 import { SupplierService } from '../../src/services/supplierService';
 import { PurchaseService } from '../../src/services/purchaseService';
 import { ExpenseService } from '../../src/services/expenseService';
@@ -157,19 +156,6 @@ export class HttpService {
     expressApp.post('/api/sales', asyncHandler(async (req, res) => {
       const client = DatabaseService.getClient();
       res.status(201).json(await SalesService.createSale(client, req.body));
-    }));
-
-    // ── Auth Routes ─────────────────────────────────────────────────────────
-    expressApp.post('/api/auth/login', asyncHandler(async (req, res) => {
-      const client = DatabaseService.getClient();
-      const { username, password } = req.body;
-      res.json(await AuthService.login(client, username, password));
-    }));
-
-    expressApp.post('/api/auth/update-password', asyncHandler(async (req, res) => {
-      const client = DatabaseService.getClient();
-      const { userId, oldPassword, newPassword } = req.body;
-      res.json(await AuthService.updatePassword(client, userId, oldPassword, newPassword));
     }));
 
     // ── Category Routes ──────────────────────────────────────────────────────

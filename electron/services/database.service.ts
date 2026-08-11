@@ -9,7 +9,6 @@ import { CompanyService } from '../../src/services/companyService';
 import { ProductService } from '../../src/services/productService';
 import { InventoryService } from '../../src/services/inventoryService';
 import { CustomerService } from '../../src/services/customerService';
-import { AuthService } from '../../src/services/authService';
 import { SupplierService } from '../../src/services/supplierService';
 
 export class DatabaseService {
@@ -107,11 +106,6 @@ export class DatabaseService {
 
         const customer = await CustomerService.seedDefaultCustomer(client);
         LoggerService.info(`Phase 2 Default Customer Verified: ${customer.name}`);
-
-        const seededAdmin = await AuthService.seedDefaultAdmin(client);
-        if (seededAdmin) {
-          LoggerService.info(`Default Admin Account Seeded (username: admin)`);
-        }
 
         const supplier = await SupplierService.seedDefaultSupplier(client);
         LoggerService.info(`Phase 2 Default Supplier Verified: ${supplier.name}`);
