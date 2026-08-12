@@ -1,0 +1,47 @@
+ALUMFAB POS — END USER LICENCE AGREEMENT
+=========================================
+
+Copyright (c) 2026 ALUMFAB Hardware. All rights reserved.
+
+1. LICENCE GRANT
+   ALUMFAB Hardware grants you a non-exclusive, non-transferable licence to
+   install and use ALUMFAB POS on point-of-sale terminals operated by your
+   business, for the number of terminals covered by your subscription or
+   purchase agreement.
+
+2. YOUR DATA
+   ALUMFAB POS stores all business data locally on this machine, under
+   %APPDATA%\ALUMFAB-POS. This includes the sales database, customer ledgers,
+   invoice history, and automatic backups. That data belongs to you.
+
+   Uninstalling ALUMFAB POS will ask whether to keep or permanently delete this
+   data. Keeping it is the default. You are responsible for retaining records
+   required by applicable tax law.
+
+3. AUTOMATIC UPDATES
+   The application periodically contacts the ALUMFAB update server to check for
+   new releases. Updates are downloaded in the background and applied only when
+   you choose to restart, or on the next application exit. No sales data is
+   transmitted during this check.
+
+4. RESTRICTIONS
+   You may not reverse engineer, decompile, or redistribute the software, or
+   remove any proprietary notices from it.
+
+5. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY AND
+   FITNESS FOR A PARTICULAR PURPOSE.
+
+6. LIMITATION OF LIABILITY
+   To the maximum extent permitted by law, ALUMFAB Hardware shall not be liable
+   for any lost profits, lost data, or business interruption arising from the
+   use of or inability to use the software.
+
+7. THIRD-PARTY COMPONENTS
+   This product includes open-source software (Electron, Node.js, Chromium,
+   React, Prisma, Express, and others) licensed under their respective terms.
+   A full list of components and licences is available from within the
+   application under Settings > About > Open Source Licences.
+
+By installing ALUMFAB POS you agree to the terms above.

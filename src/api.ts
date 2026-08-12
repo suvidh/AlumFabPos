@@ -20,7 +20,8 @@ import type {
   AppInfoResult,
   AppPathsResult,
   DatabaseHealthResult,
-  PingResult
+  PingResult,
+  UpdateState
 } from '../electron/ipc/contracts';
 import type { 
   Company, 
@@ -34,8 +35,26 @@ import type {
   Supplier,
   Purchase,
   Expense,
-  Category
+  Category,
+  SalesReturn,
+  VoidAuditLog,
+  CashShift,
+  BackupMetadata
 } from '@prisma/client';
+
+// ── Browser-mode updater stub ──────────────────────────────────────────────
+const BROWSER_UPDATE_STATE: UpdateState = {
+  status: 'idle',
+  currentVersion: 'browser',
+  availableVersion: null,
+  releaseNotes: null,
+  releaseDate: null,
+  downloadPercent: 0,
+  bytesPerSecond: 0,
+  error: null,
+  lastCheckedAt: null,
+  updateReadyToInstall: false
+};
 
 // ── HTTP base URL ──────────────────────────────────────────────────────────
 // Route api calls relatively through the Vite dev-server proxy to avoid CORS/Mixed Content.
@@ -96,6 +115,8 @@ const httpAPI: AlumfabAPI = {
     logoPath?: string;
     isActive?: boolean;
   }) => http<Branch>('PATCH', `/branches/${branchId}`, data),
+  deleteBranch:         (branchId: string) =>
+    http<{ softDeleted: boolean }>('DELETE', `/branches/${branchId}`),
 
   // Categories
   getAllCategories:      (includeInactive?: boolean) =>
@@ -177,19 +198,24 @@ const httpAPI: AlumfabAPI = {
     isActive?: boolean;
   }) => http<Customer>('PATCH', `/customers/${customerId}`, data),
 
-  // Sales
   createSale:           (data: {
     branchId: string;
     customerId?: string;
-    items: { productId: string; quantityDecimal: number; rateRupees?: number }[];
+    items: { productId: string; quantityDecimal: number; rateRupees?: number; discountRupees?: number }[];
     discountType?: any;
     discountValueBasisPoints?: number;
     discountRupees?: number;
     discountNote?: string;
     paymentMethod?: any;
+    paymentAmountRupees?: number;
     chequeNumber?: string;
     chequeBank?: string;
     chequeDate?: Date;
+    payments?: {
+      method: any;
+      amountRupees: number;
+      chequeNumber?: string;
+    }[];
   }) => http<Sale>('POST', '/sales', data),
   getAllSales:           (branchId?: string) =>
     http<Sale[]>('GET', `/sales${branchId ? `?branchId=${branchId}` : ''}`),
@@ -220,6 +246,65 @@ const httpAPI: AlumfabAPI = {
   runImportDryRun:      (filePath: string) => http<ImportDryRunResult>('POST', '/import/dry-run', { filePath }),
   commitImport:         (dryRunResult: ImportDryRunResult, conflictStrategy: ConflictStrategy) =>
     http<ImportCommitResult>('POST', '/import/commit', { dryRunResult, conflictStrategy }),
+  printSilent:          (htmlContent: string, options?: { silent?: boolean; deviceName?: string }) =>
+    http<boolean>('POST', '/print/silent', { htmlContent, options }),
+  downloadInvoicePdf:   (htmlContent: string, suggestedFileName: string) => {
+    // Remote/browser tabs (e.g. Tailscale access) have no native Save dialog
+    // or PDF renderer to call into. Fall back to downloading the invoice as
+    // an .html file — the browser's own Print > Save as PDF covers the rest.
+    try {
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = suggestedFileName.endsWith('.html') ? suggestedFileName : `${suggestedFileName}.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return Promise.resolve({ success: true });
+    } catch (err) {
+      return Promise.resolve({
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to download invoice.'
+      });
+    }
+  },
+  getSalesHistory:      (filters: any) =>
+    http<{ sales: Sale[]; totalCount: number }>('POST', '/sales/history', filters),
+  processReturn:        (data: any) =>
+    http<SalesReturn>('POST', '/sales/return', data),
+  voidSale:             (data: any) =>
+    http<VoidAuditLog>('POST', '/sales/void', data),
+  openShift:            (branchId: string, cashierId: string, startingFloatRupees: number) =>
+    http<CashShift>('POST', '/reports/z-report/open', { branchId, cashierId, startingFloatRupees }),
+  getOpenShift:         (branchId: string, cashierId: string) =>
+    http<CashShift | null>('GET', `/reports/z-report/open?branchId=${branchId}&cashierId=${cashierId}`),
+  closeShift:           (data: any) =>
+    http<CashShift>('POST', '/reports/z-report/close', data),
+  getSalesSummary:      (branchId: string, filters: any) =>
+    http<any>('POST', `/reports/summary?branchId=${branchId}`, filters),
+  getTaxLiabilityReport: (branchId: string, filters: any) =>
+    http<any[]>('POST', `/reports/tax-liability?branchId=${branchId}`, filters),
+  getTopSellingProducts: (branchId: string, limit?: number) =>
+    http<any[]>('GET', `/reports/top-products?branchId=${branchId}&limit=${limit || 10}`),
+  getProfitMarginAnalysis: (branchId: string, filters: any) =>
+    http<any>('POST', `/reports/profit-margin?branchId=${branchId}`, filters),
+  triggerBackup:        (backupType?: 'MANUAL' | 'AUTOMATIC') =>
+    http<BackupMetadata>('POST', '/system/backup/trigger', { backupType }),
+  listBackups:          () =>
+    http<BackupMetadata[]>('GET', '/system/backup/list'),
+  restoreBackup:        (backupId: string) =>
+    http<boolean>('POST', '/system/restore', { backupId }),
+
+  // ── Auto-Updater ─────────────────────────────────────────────────────────
+  // A plain browser session (remote stock-take tablet over Tailscale) is not
+  // the thing being updated — the desktop till is. These resolve to a benign
+  // "nothing to do" so shared UI can render the update panel unconditionally.
+  checkForUpdates:      () => Promise.resolve(BROWSER_UPDATE_STATE),
+  getUpdateState:       () => Promise.resolve(BROWSER_UPDATE_STATE),
+  installUpdateNow:     () => Promise.resolve(false),
+  onUpdateEvent:        () => () => undefined
 };
 
 // ── Export the right implementation ───────────────────────────────────────

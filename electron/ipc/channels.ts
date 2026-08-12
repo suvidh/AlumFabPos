@@ -15,10 +15,12 @@ export const IPC_CHANNELS = {
   BRANCH_GET_BY_ID: 'branch:get-by-id',
   BRANCH_CREATE: 'branch:create',
   BRANCH_UPDATE: 'branch:update',
+  BRANCH_DELETE: 'branch:delete',
 
   PRODUCT_GET_ALL: 'product:get-all',
   PRODUCT_CREATE: 'product:create',
   PRODUCT_UPDATE: 'product:update',
+  PRODUCT_DELETE: 'product:delete',
 
   // Category Channels
   CATEGORY_GET_ALL: 'category:get-all',
@@ -27,6 +29,9 @@ export const IPC_CHANNELS = {
 
   INVENTORY_GET_BRANCH: 'inventory:get-branch',
   INVENTORY_ADJUST: 'inventory:adjust',
+  INVENTORY_CHECK_AVAILABILITY: 'inventory:check-availability',
+  INVENTORY_TRANSFER: 'inventory:transfer',
+  INVENTORY_LOW_STOCK_REPORT: 'inventory:low-stock-report',
 
   CUSTOMER_GET_ALL: 'customer:get-all',
   CUSTOMER_CREATE: 'customer:create',
@@ -47,7 +52,36 @@ export const IPC_CHANNELS = {
   // Product Import Pipeline Channels
   PRODUCT_IMPORT_DRY_RUN: 'product:import-dry-run',
   PRODUCT_IMPORT_COMMIT:  'product:import-commit',
-  PRODUCT_IMPORT_GET_DEFAULT_PATH: 'product:import-get-default-path'
+  PRODUCT_IMPORT_GET_DEFAULT_PATH: 'product:import-get-default-path',
+
+  // Print Channels
+  PRINT_SILENT: 'print:silent',
+  PRINT_SAVE_INVOICE_PDF: 'print:save-invoice-pdf',
+
+  // History, Returns, and Voids Channels
+  SALE_GET_HISTORY: 'sale:get-history',
+  SALE_RETURN: 'sale:return',
+  SALE_VOID: 'sale:void',
+
+  // Shifts and Reconciliation channels
+  REPORT_OPEN_SHIFT: 'report:open-shift',
+  REPORT_GET_OPEN_SHIFT: 'report:get-open-shift',
+  REPORT_CLOSE_SHIFT: 'report:close-shift',
+  REPORT_GET_SUMMARY: 'report:get-summary',
+  REPORT_GET_TAX: 'report:get-tax',
+  REPORT_GET_TOP_PRODUCTS: 'report:get-top-products',
+  REPORT_GET_PROFIT: 'report:get-profit',
+
+  // Backup and Restore Channels
+  SYSTEM_BACKUP_TRIGGER: 'system:backup-trigger',
+  SYSTEM_BACKUP_LIST: 'system:backup-list',
+  SYSTEM_RESTORE: 'system:restore',
+
+  // Auto-Updater Channels
+  UPDATE_CHECK: 'update:check',            // renderer -> main, manual check
+  UPDATE_GET_STATE: 'update:get-state',    // renderer -> main, current snapshot
+  UPDATE_INSTALL_NOW: 'update:install-now',// renderer -> main, restart + apply
+  UPDATE_EVENT: 'update:event'             // main -> renderer, state push
 } as const;
 
 export type IpcChannelName = typeof IPC_CHANNELS[keyof typeof IPC_CHANNELS];

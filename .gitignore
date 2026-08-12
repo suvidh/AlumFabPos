@@ -77,3 +77,19 @@ dist-electron/
 *.exe
 .env
 *.db
+
+# --- Installer / release engineering ----------------------------------------
+# Prerequisite redistributables are fetched on the build machine, never committed
+build/prereq/*.exe
+build/prereq/*.msi
+# NSSM binary (only needed if ENABLE_NSSM_SERVICE is turned on)
+build/bin/
+# electron-builder intermediates
+release/
+release/.cache/
+*.blockmap
+latest.yml
+# Code-signing material — must never reach the repo
+*.pfx
+*.p12
+.env.signing

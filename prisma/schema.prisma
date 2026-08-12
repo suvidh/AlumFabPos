@@ -24,6 +24,16 @@ enum SellingUnit {
 enum PaymentMethod {
   CASH
   CHEQUE
+  CARD
+  UPI
+  CREDIT
+}
+
+enum SaleStatus {
+  PAID
+  PARTIALLY_REFUNDED
+  FULLY_REFUNDED
+  VOID
 }
 
 enum StockMovementType {
@@ -82,6 +92,7 @@ model Branch {
   invoicePrefix String?  @default("INV-")
   logoPath      String?
   isActive      Boolean  @default(true)
+  isDeleted     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -91,12 +102,18 @@ model Branch {
   invoiceSequences InvoiceSequence[]
   purchases        Purchase[]
   expenses         Expense[]
+  branchBarcodes   ProductBranchBarcode[]
+  purchaseOrders   PurchaseOrder[]
+  grns             GoodsReceivedNote[]
+  defaultCustomers Customer[]             @relation("CustomerDefaultBranch")
+  cashShifts       CashShift[]
 }
 
 model Category {
   id        String    @id @default(cuid())
   name      String    @unique
   isActive  Boolean   @default(true)
+  isDeleted Boolean   @default(false)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
@@ -116,11 +133,14 @@ model Product {
   finish              String?
   sellingUnit         SellingUnit @default(PCS)
   sourceUnit          String?     // Raw source unit string e.g. "RFT", "PCS"
+  costPricePaise      Int         @default(0)
   sellingPricePaise   Int         // GST-Inclusive Price in Paise (₹1 = 100 paise)
+  taxPercentage       Float       @default(0.0)
   weightPerPieceMilli Int?        // Weight in Milli-units (1 Kg = 1000 milli-units)
   lengthMilli         Int?        // Length in Milli-units (1 FT = 1000 milli-units)
   minimumStockMilli   Int?        @default(0) // Minimum reorder stock level
   isActive            Boolean     @default(true)
+  isDeleted           Boolean     @default(false)
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -128,17 +148,22 @@ model Product {
   saleItems      SaleItem[]
   stockMovements StockMovement[]
   purchaseItems  PurchaseItem[]
+  branchBarcodes ProductBranchBarcode[]
+  poItems        PurchaseOrderItem[]
+  grnItems       GRNItem[]
+  returns        SalesReturnItem[]
 }
 
 model BranchInventory {
-  id            String   @id @default(cuid())
-  branchId      String
-  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  productId     String
-  product       Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  quantityMilli Int      @default(0) // Stock quantity in milli-units (1 unit = 1000 milli-units)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  branchId              String
+  branch                Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId             String
+  product               Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityMilli         Int      @default(0) // Stock quantity in milli-units (1 unit = 1000 milli-units)
+  reorderThresholdMilli Int?     // Branch-specific override; null defaults to product.minimumStockMilli
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@unique([branchId, productId])
 }
@@ -160,18 +185,25 @@ model StockMovement {
 }
 
 model Customer {
-  id        String   @id @default(cuid())
-  name      String
-  phone     String?
-  address   String?
-  gstin     String?
-  state     String?
-  notes     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  name                    String
+  phone                   String?
+  email                   String?
+  address                 String?
+  gstin                   String?
+  state                   String?
+  notes                   String?
+  defaultBranchId         String?
+  defaultBranch           Branch?  @relation("CustomerDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  creditLimitPaise        Int      @default(0)
+  outstandingBalancePaise Int      @default(0)
+  isActive                Boolean  @default(true)
+  isDeleted               Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  sales     Sale[]
+  sales       Sale[]
+  ledgerItems CustomerLedger[]
 }
 
 model InvoiceSequence {
@@ -214,6 +246,13 @@ model Sale {
 
   items                    SaleItem[]
   payments                 Payment[]
+  status                   SaleStatus    @default(PAID)
+  returns                  SalesReturn[]
+  voidLog                  VoidAuditLog?
+  shiftId                  String?
+  shift                    CashShift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  offlineUuid              String?       @unique
+  syncStatus               String        @default("SYNCED") // PENDING, SYNCED
 }
 
 model SaleItem {
@@ -267,16 +306,19 @@ model AuditLog {
 
 
 model Supplier {
-  id        String     @id @default(cuid())
-  name      String
-  phone     String?
-  address   String?
-  gstin     String?
-  notes     String?
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  purchases Purchase[]
+  id             String          @id @default(cuid())
+  name           String
+  phone          String?
+  address        String?
+  gstin          String?
+  notes          String?
+  isActive       Boolean         @default(true)
+  isDeleted      Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  purchases      Purchase[]
+  purchaseOrders PurchaseOrder[]
+  grns           GoodsReceivedNote[]
 }
 
 model Purchase {
@@ -316,5 +358,171 @@ model Expense {
   notes               String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ==========================================
+// BLOCK 1 ENUMS & MODELS
+// ==========================================
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  CANCELLED
+}
+
+enum GRNStatus {
+  COMPLETED
+  CANCELLED
+}
+
+model ProductBranchBarcode {
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId  String
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  barcode   String
+
+  @@id([productId, branchId, barcode])
+  @@index([barcode])
+}
+
+model PurchaseOrder {
+  id                   String              @id @default(cuid())
+  poNumber             String              @unique
+  supplierId           String
+  supplier             Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branchId             String
+  branch               Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  orderDate            DateTime            @default(now())
+  expectedDeliveryDate DateTime?
+  status               PurchaseOrderStatus @default(DRAFT)
+  subtotalPaise        Int
+  taxAmountPaise       Int
+  totalAmountPaise     Int
+  notes                String?
+  isDeleted            Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  items PurchaseOrderItem[]
+  grns  GoodsReceivedNote[]
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityOrderedMilli Int
+  unitCostPaise   Int
+  taxPercentage   Float         @default(0.0)
+  taxAmountPaise  Int
+  lineTotalPaise  Int
+}
+
+model GoodsReceivedNote {
+  id              String            @id @default(cuid())
+  grnNumber       String            @unique
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  supplierId      String
+  supplier        Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branchId        String
+  branch          Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  receivedDate    DateTime          @default(now())
+  receivedBy      String
+  status          GRNStatus         @default(COMPLETED)
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  items GRNItem[]
+}
+
+model GRNItem {
+  id                    String            @id @default(cuid())
+  grnId                 String
+  grn                   GoodsReceivedNote @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  productId             String
+  product               Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityReceivedMilli Int
+  quantityAcceptedMilli Int
+  quantityRejectedMilli Int               @default(0)
+  unitCostPaise         Int
+  taxPercentage         Float             @default(0.0)
+  taxAmountPaise        Int
+  lineTotalPaise        Int
+  notes                 String?
+}
+
+model CustomerLedger {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  transactionType String   // e.g. "CREDIT_SALE", "PAYMENT_RECEIVED", "ADJUSTMENT"
+  amountPaise     Int      // positive for credit sales, negative for payments
+  paymentMethod   String?  // CASH, CHEQUE, BANK_TRANSFER
+  referenceId     String?  // e.g. Sale ID or receipt identifier
+  notes           String?
+  createdAt       DateTime @default(now())
+}
+
+model SalesReturn {
+  id                String            @id @default(cuid())
+  returnNumber      String            @unique
+  saleId            String
+  sale              Sale              @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  refundAmountPaise Int
+  refundMethod      PaymentMethod
+  reason            String?
+  createdAt         DateTime          @default(now())
+  items             SalesReturnItem[]
+}
+
+model SalesReturnItem {
+  id            String      @id @default(cuid())
+  salesReturnId String
+  salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantityMilli Int
+  ratePaise     Int
+  totalPaise    Int
+  createdAt     DateTime    @default(now())
+}
+
+model VoidAuditLog {
+  id        String   @id @default(cuid())
+  saleId    String   @unique
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  reason    String
+  voidedBy  String
+  createdAt DateTime @default(now())
+}
+
+model CashShift {
+  id                  String    @id @default(cuid())
+  branchId            String
+  branch              Branch    @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  cashierId           String
+  openedAt            DateTime  @default(now())
+  closedAt            DateTime?
+  startingFloatPaise  Int
+  expectedCashPaise   Int       @default(0)
+  actualCashPaise     Int?
+  variancePaise       Int?
+  totalSalesPaise     Int       @default(0)
+  cashSalesPaise      Int       @default(0)
+  cardSalesPaise      Int       @default(0)
+  upiSalesPaise       Int       @default(0)
+  creditSalesPaise    Int       @default(0)
+  chequeSalesPaise    Int       @default(0)
+  refundsPaise        Int       @default(0)
+  notes               String?
+  status              String    @default("OPEN") // OPEN, CLOSED
+  sales               Sale[]
 }
 

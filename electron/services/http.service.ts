@@ -100,6 +100,11 @@ export class HttpService {
       res.json(await BranchService.updateBranch(client, req.params.branchId as string, req.body));
     }));
 
+    expressApp.delete('/api/branches/:branchId', asyncHandler(async (req, res) => {
+      const client = DatabaseService.getClient();
+      res.json(await BranchService.deleteBranch(client, req.params.branchId as string));
+    }));
+
     // ── Product Routes ──────────────────────────────────────────────────────
     expressApp.get('/api/products', asyncHandler(async (req, res) => {
       const client = DatabaseService.getClient();

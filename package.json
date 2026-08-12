@@ -3,6 +3,12 @@
   "private": true,
   "version": "1.0.0",
   "main": "dist-electron/main/index.js",
+  "description": "ALUMFAB POS — offline-first point of sale for hardware retail",
+  "author": {
+    "name": "ALUMFAB Hardware",
+    "email": "support@alumfab.example.com"
+  },
+  "homepage": "https://alumfab.example.com",
   "scripts": {
     "dev": "vite",
     "electron:dev": "vite",
@@ -10,28 +16,21 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "package": "npm run build && electron-builder"
-  },
-  "build": {
-    "appId": "com.alumfab.pos",
-    "productName": "ALUMFAB POS",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ],
-    "extraResources": [
-      "prisma/pos.db"
-    ],
-    "win": {
-      "target": "nsis"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "db:repair": "node -r esbuild-register scripts/repair-runtime-schema.ts",
+    "db:force-migrate": "node -r esbuild-register scripts/force-migrate-runtime.ts",
+    "company:patch": "node -r esbuild-register scripts/patch-company-profile.ts",
+    "db:drift": "node -r esbuild-register scripts/repair-runtime-schema.ts --all",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "test:drift": "node --experimental-sqlite -r esbuild-register scripts/test_schema_drift.ts",
+    "package": "npm run build && electron-builder",
+    "prebuild:release": "prisma generate",
+    "dist:dir": "npm run build && electron-builder --win --x64 --dir",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "release:win": "npm run build && electron-builder --win --x64 --publish always",
+    "release:draft": "npm run build && electron-builder --win --x64 --publish onTagOrDraft",
+    "verify:config": "electron-builder --win --x64 --dir --config electron-builder.yml --publish never",
+    "verify:bundle": "vite build --config vite.ebcheck.mjs && node scripts/verify-bundle.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
@@ -39,6 +38,7 @@
     "cors": "^2.8.6",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "lucide-react": "^1.30.0",
     "qrcode": "^1.5.4",

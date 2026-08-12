@@ -44,7 +44,22 @@ async function http<T>(
 
 // ── IPC_CHANNELS mirror ──────────────────────────────────────────────────────
 import { IPC_CHANNELS } from '../ipc/channels';
-import { AlumfabAPI } from '../ipc/contracts';
+import { AlumfabAPI, UpdateState } from '../ipc/contracts';
+
+// Browser-mode fallback: a remote tablet reaching the till over Tailscale is
+// not the thing that gets updated, so the updater reports a benign idle state.
+const BROWSER_UPDATE_STATE: UpdateState = {
+  status: 'idle',
+  currentVersion: 'browser',
+  availableVersion: null,
+  releaseNotes: null,
+  releaseDate: null,
+  downloadPercent: 0,
+  bytesPerSecond: 0,
+  error: null,
+  lastCheckedAt: null,
+  updateReadyToInstall: false
+};
 
 // ── API implementation ───────────────────────────────────────────────────────
 export const alumfabAPI: AlumfabAPI = {
@@ -100,6 +115,11 @@ export const alumfabAPI: AlumfabAPI = {
     IS_ELECTRON
       ? ipcRenderer!.invoke(IPC_CHANNELS.BRANCH_UPDATE, { branchId, data })
       : http('PATCH', `/branches/${branchId}`, data),
+
+  deleteBranch: (branchId) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.BRANCH_DELETE, { branchId })
+      : http('DELETE', `/branches/${branchId}`),
 
   // ── Categories ──────────────────────────────────────────────────────────
   getAllCategories: (includeInactive) =>
@@ -224,4 +244,128 @@ export const alumfabAPI: AlumfabAPI = {
     IS_ELECTRON
       ? ipcRenderer!.invoke(IPC_CHANNELS.PRODUCT_IMPORT_COMMIT, { dryRunResult, conflictStrategy })
       : http('POST', '/import/commit', { dryRunResult, conflictStrategy }),
+
+  printSilent: (htmlContent, options) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.PRINT_SILENT, { htmlContent, options })
+      : Promise.resolve(false),
+
+  downloadInvoicePdf: (htmlContent, suggestedFileName) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.PRINT_SAVE_INVOICE_PDF, { htmlContent, suggestedFileName })
+      : // Remote/browser mode (e.g. Tailscale access) has no native Save
+        // dialog or PDF renderer to call into. Fall back to downloading the
+        // invoice as an .html file — the browser's own Print > Save as PDF
+        // covers the rest, and this is still strictly better than failing.
+        (() => {
+          try {
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = suggestedFileName.endsWith('.html') ? suggestedFileName : `${suggestedFileName}.html`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            return Promise.resolve({ success: true });
+          } catch (err) {
+            return Promise.resolve({
+              success: false,
+              error: err instanceof Error ? err.message : 'Failed to download invoice.'
+            });
+          }
+        })(),
+
+  getSalesHistory: (filters) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SALE_GET_HISTORY, { filters })
+      : Promise.resolve({ sales: [], totalCount: 0 }),
+
+  processReturn: (data) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SALE_RETURN, { data })
+      : Promise.reject(new Error('IPC only')),
+
+  voidSale: (data) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SALE_VOID, { data })
+      : Promise.reject(new Error('IPC only')),
+
+  openShift: (branchId, cashierId, startingFloatRupees) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_OPEN_SHIFT, { branchId, cashierId, startingFloatRupees })
+      : Promise.reject(new Error('IPC only')),
+
+  getOpenShift: (branchId, cashierId) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_GET_OPEN_SHIFT, { branchId, cashierId })
+      : Promise.resolve(null),
+
+  closeShift: (data) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_CLOSE_SHIFT, { data })
+      : Promise.reject(new Error('IPC only')),
+
+  getSalesSummary: (branchId, filters) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_GET_SUMMARY, { branchId, filters })
+      : Promise.reject(new Error('IPC only')),
+
+  getTaxLiabilityReport: (branchId, filters) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_GET_TAX, { branchId, filters })
+      : Promise.reject(new Error('IPC only')),
+
+  getTopSellingProducts: (branchId, limit) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_GET_TOP_PRODUCTS, { branchId, limit })
+      : Promise.reject(new Error('IPC only')),
+
+  getProfitMarginAnalysis: (branchId, filters) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.REPORT_GET_PROFIT, { branchId, filters })
+      : Promise.reject(new Error('IPC only')),
+
+  triggerBackup: (backupType) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SYSTEM_BACKUP_TRIGGER, { backupType })
+      : Promise.reject(new Error('IPC only')),
+
+  listBackups: () =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SYSTEM_BACKUP_LIST)
+      : Promise.resolve([]),
+
+  restoreBackup: (backupId) =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.SYSTEM_RESTORE, { backupId })
+      : Promise.reject(new Error('IPC only')),
+
+  // ── Auto-Updater ────────────────────────────────────────────────────────
+  checkForUpdates: () =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.UPDATE_CHECK)
+      : Promise.resolve(BROWSER_UPDATE_STATE),
+
+  getUpdateState: () =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.UPDATE_GET_STATE)
+      : Promise.resolve(BROWSER_UPDATE_STATE),
+
+  installUpdateNow: () =>
+    IS_ELECTRON
+      ? ipcRenderer!.invoke(IPC_CHANNELS.UPDATE_INSTALL_NOW)
+      : Promise.resolve(false),
+
+  onUpdateEvent: (callback) => {
+    if (!IS_ELECTRON) return () => undefined;
+    // Deliberately drop the IpcRendererEvent argument: never hand a renderer a
+    // live `sender` handle across the context bridge.
+    const listener = (_event: unknown, state: UpdateState) => callback(state);
+    ipcRenderer!.on(IPC_CHANNELS.UPDATE_EVENT, listener as never);
+    return () => {
+      ipcRenderer!.removeListener(IPC_CHANNELS.UPDATE_EVENT, listener as never);
+    };
+  }
 };

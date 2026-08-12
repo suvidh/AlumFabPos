@@ -1,0 +1,218 @@
+# =============================================================================
+#  ALUMFAB POS — electron-builder production packaging configuration
+# =============================================================================
+#  Target      : Windows 10 / 11 x64 retail till machines
+#  Output      : release/ALUMFAB-POS-Setup-<version>-x64.exe  (single-file NSIS)
+#  Install mode: Per-machine  ->  C:\Program Files\ALUMFAB POS
+#  Data mode   : Per-user     ->  %APPDATA%\ALUMFAB-POS  (db, backups, logs)
+#
+#  This file replaces the inline "build" block that used to live in
+#  package.json. Keep it here — YAML lets us document every decision, and
+#  electron-builder picks up `electron-builder.yml` automatically.
+#
+#  Build:      npm run dist:win        (local, no publish)
+#  Release:    npm run release:win     (builds + uploads to the update feed)
+# =============================================================================
+
+appId: com.alumfab.pos
+productName: ALUMFAB POS
+copyright: Copyright © 2026 ALUMFAB Hardware. All rights reserved.
+
+# --- Directory layout --------------------------------------------------------
+directories:
+  # Installer artifacts land here. Add `release/` to .gitignore.
+  output: release
+  # Icons, NSIS include script, license, prereq bootstrappers.
+  buildResources: build
+
+# --- What goes inside app.asar ----------------------------------------------
+#  IMPORTANT: once you declare `files`, you own the whole list. electron-builder
+#  still prunes devDependencies automatically, but the node_modules glob must be
+#  present or Prisma/Express will be missing at runtime.
+files:
+  - dist/**/*                     # Vite renderer bundle (React UI)
+  - dist-electron/**/*            # Compiled main + preload processes
+  - package.json
+  - node_modules/**/*             # production deps only (devDeps are pruned)
+  #
+  # SIZE NOTE: vite-plugin-electron already bundles express, cors, qrcode and
+  # the Prisma JS runtime *into* dist-electron/main/index.js — verified with
+  #   grep -oE 'require\("[^"]+"\)' dist-electron/main/index.js
+  # which leaves only Node builtins and `electron`. The only thing that must
+  # come from node_modules at runtime is the Prisma native query engine.
+  #
+  # You can therefore shave ~40 MB by replacing the glob above with:
+  #     - node_modules/.prisma/client/**/*
+  #     - node_modules/@prisma/client/**/*
+  # Do that only after a full install-and-sell smoke test on a clean VM — a
+  # missed dynamic require fails at the customer's counter, not in CI.
+
+  # ---- Dead weight removed from the shipped bundle -------------------------
+  - '!**/*.{md,markdown,map,ts,tsx,flow,d.ts.map}'
+  - '!**/{test,tests,__tests__,powered-test,example,examples,docs,doc}/**'
+  - '!**/{.eslintrc,.eslintrc.js,.eslintrc.json,.prettierrc,.editorconfig}'
+  - '!**/{.github,.vscode,.idea,.nyc_output,coverage}/**'
+  - '!**/*.{spec,test}.js'
+
+  # ---- Prisma hygiene ------------------------------------------------------
+  # The CLI (`prisma`) is a devDependency and never ships. Keep only the
+  # generated client + the single Windows query engine we actually load.
+  - '!node_modules/.prisma/client/*.tmp*'          # stray Windows temp copies
+  - '!node_modules/.prisma/client/deno/**'
+  - '!node_modules/.prisma/client/*debian*'        # non-Windows engines
+  - '!node_modules/.prisma/client/*rhel*'
+  - '!node_modules/.prisma/client/*darwin*'
+  - '!node_modules/@prisma/engines/**'
+
+# --- Files that must stay OUTSIDE the asar archive ---------------------------
+#  Native .node addons and the Prisma query engine cannot be dlopen()'d from
+#  inside an asar archive. electron-builder mirrors these into
+#  resources/app.asar.unpacked/ and Node resolves them transparently.
+asarUnpack:
+  - node_modules/.prisma/**
+  - node_modules/@prisma/client/**
+  - '**/*.node'
+
+asar: true
+
+# --- Loose files shipped next to the app (resources/) ------------------------
+extraResources:
+  # Seed database. On first launch DatabaseService.bootstrap() copies this to
+  # %APPDATA%\ALUMFAB-POS\database\pos.db. Program Files stays read-only, so the
+  # live DB never lives in the install dir — this is what keeps UAC happy.
+  - from: prisma/pos.db
+    to: pos.db
+  # Shipped so `prisma migrate`-style forward migrations can run post-update.
+  - from: prisma/schema.prisma
+    to: schema.prisma
+  # Recorded DDL. SchemaGuard replays CREATE TABLE statements from here when a
+  # terminal's database is missing whole tables — the Prisma CLI is a
+  # devDependency and cannot run in a packaged build, but this text can.
+  # ~30 KB. Without it, missing tables go back to being a blocking error.
+  - from: prisma/migrations
+    to: migrations
+    filter:
+      - '**/*.sql'
+      - migration_lock.toml
+  # Default product catalogue used by the ODS import wizard.
+  - from: hardware.ods
+    to: hardware.ods
+
+# --- Windows target ----------------------------------------------------------
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64                     # POS tills are all x64; ia32 doubles build time
+  icon: build/icon.ico
+  artifactName: ALUMFAB-POS-Setup-${version}-${arch}.${ext}
+
+  # File > Properties metadata. Support desks read this off the exe.
+  # (The publisher shown by Windows comes from the signing certificate; with an
+  # unsigned build it reads "Unknown publisher". Set it under signtoolOptions
+  # below once the cert is in place — `win.publisherName` was removed in
+  # electron-builder 26.)
+  legalTrademarks: ALUMFAB
+
+  # The app itself must run UNELEVATED (asInvoker). Only the installer elevates.
+  # Never set this to requireAdministrator: an elevated Electron app cannot
+  # accept drag-and-drop, and %APPDATA% would resolve to the admin's profile.
+  requestedExecutionLevel: asInvoker
+
+  # ---- Code signing (unsigned for now) ------------------------------------
+  # Without a certificate, SmartScreen will warn on first run for each new
+  # release until it accrues reputation. When the OV/EV cert arrives, uncomment
+  # and set CSC_LINK / CSC_KEY_PASSWORD in the CI environment (never in git).
+  #
+  # signtoolOptions:
+  #   publisherName: 'ALUMFAB Hardware Pvt Ltd'
+  #   certificateSubjectName: 'ALUMFAB Hardware Pvt Ltd'   # EV cert in HSM/token
+  #   signingHashAlgorithms: ['sha256']
+  #   rfc3161TimeStampServer: 'http://timestamp.digicert.com'
+  # verifyUpdateCodeSignature: true
+
+# --- NSIS installer behaviour ------------------------------------------------
+nsis:
+  # Assisted (multi-page) installer rather than the one-click "flash by" one.
+  # Retail installs are done by technicians who want to see the path.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+  # Per-machine: one copy under Program Files, shared by every till operator
+  # who logs into the terminal. Requires a single UAC prompt at install time.
+  perMachine: true
+  allowElevation: true
+
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  installerSidebar: build/installerSidebar.bmp
+  uninstallerSidebar: build/uninstallerSidebar.bmp
+
+  license: build/license.txt
+
+  # ---- Shortcuts -----------------------------------------------------------
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  menuCategory: ALUMFAB
+  shortcutName: ALUMFAB POS
+
+  # ---- Add/Remove Programs -------------------------------------------------
+  uninstallDisplayName: ALUMFAB POS ${version}
+  displayLanguageSelector: false
+
+  # ---- Data retention ------------------------------------------------------
+  # false = electron-builder must NOT nuke user data. installer.nsh asks the
+  # operator first, because %APPDATA%\ALUMFAB-POS holds the live sales ledger.
+  deleteAppDataOnUninstall: false
+
+  # ---- Update ergonomics ---------------------------------------------------
+  # Blockmap-based differential downloads: a patch release ships ~2-5 MB
+  # instead of the full ~120 MB. Critical on shop-floor 4G connections.
+  differentialPackage: true
+  # After a manual install, launch straight into the till. (Auto-updates run
+  # the staged package with /S and relaunch via electron-updater instead.)
+  runAfterFinish: true
+
+  # ---- Our custom logic ----------------------------------------------------
+  # Prerequisite checks, firewall rule, auto-start, uninstall data prompt,
+  # and the (opt-in) NSSM service block.
+  include: build/installer.nsh
+
+  # Optional: warn instead of silently killing a running till session.
+  # electron-builder's default running-app check already handles the common
+  # case; installer.nsh adds a hard taskkill fallback for orphaned processes.
+
+# --- Auto-update feed --------------------------------------------------------
+#  Generic HTTPS provider: you host latest.yml + the .exe + .blockmap on your
+#  own server. No GitHub reachability required from shop networks, which is the
+#  usual failure mode for retail sites behind restrictive ISP routers.
+#
+#  Directory layout on the server:
+#     /pos/latest.yml
+#     /pos/ALUMFAB-POS-Setup-1.0.1-x64.exe
+#     /pos/ALUMFAB-POS-Setup-1.0.1-x64.exe.blockmap
+#
+#  To switch to GitHub Releases instead, replace this whole block with:
+#     publish:
+#       provider: github
+#       owner: <org>
+#       repo: hardware_app
+publish:
+  - provider: generic
+    url: https://updates.alumfab.example.com/pos/
+    channel: latest
+    # Fail the build rather than shipping an installer that can never update.
+    useMultipleRangeRequest: true
+
+# --- Misc --------------------------------------------------------------------
+# Don't try to rebuild native modules against Electron headers on the build
+# box; Prisma ships a prebuilt engine and there are no other native addons.
+npmRebuild: false
+
+# Compression: 'maximum' costs ~2 min of build time and saves ~25% on the
+# installer. Worth it for over-the-air updates to remote shops.
+compression: maximum
+
+# Build-time metadata electron-updater writes into latest.yml.
+generateUpdatesFilesForAllChannels: false

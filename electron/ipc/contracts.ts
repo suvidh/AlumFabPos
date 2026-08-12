@@ -2,8 +2,11 @@ import {
   Company, Branch, Product, BranchInventory, 
   Customer, Sale, StockMovement, PaymentMethod, 
   DiscountType, StockMovementType, SellingUnit,
-  Supplier, Purchase, Expense, Category
+  Supplier, Purchase, Expense, Category,
+  SalesReturn, VoidAuditLog, SaleStatus, CashShift, BackupMetadata
 } from '@prisma/client';
+import { SalesHistoryFilters, ProcessReturnInput, ProcessVoidInput } from '../../src/services/salesService';
+import { CloseShiftInput, DateRangeFilters } from '../../src/services/reportService';
 
 // ============================================================
 // Product Import Pipeline Contracts
@@ -81,6 +84,40 @@ export interface PingResult {
   timestamp: string;
 }
 
+// ============================================================
+// Auto-Updater Contracts
+// ============================================================
+
+/**
+ * idle        — nothing to do, or the last check found no newer build
+ * checking    — talking to the update feed right now
+ * downloading — a newer build is being pulled in the background
+ * ready       — package staged on disk; applies on restart or next quit
+ * error       — last operation failed (usually just "shop is offline")
+ */
+export type UpdateStatus = 'idle' | 'checking' | 'downloading' | 'ready' | 'error';
+
+export interface UpdateState {
+  status: UpdateStatus;
+  /** Version currently running. */
+  currentVersion: string;
+  /** Version on the feed, once known. */
+  availableVersion: string | null;
+  releaseNotes: string | null;
+  releaseDate: string | null;
+  /** 0-100, only meaningful while status === 'downloading'. */
+  downloadPercent: number;
+  bytesPerSecond: number;
+  error: string | null;
+  /** ISO timestamp of the last completed check. */
+  lastCheckedAt: string | null;
+  /**
+   * True once the package is on disk. The UI should surface a non-blocking
+   * "Restart to update" affordance — never an automatic restart mid-shift.
+   */
+  updateReadyToInstall: boolean;
+}
+
 export interface AlumfabAPI {
   // System Methods
   getAppInfo: () => Promise<AppInfoResult>;
@@ -116,6 +153,7 @@ export interface AlumfabAPI {
     logoPath?: string;
     isActive?: boolean;
   }) => Promise<Branch>;
+  deleteBranch: (branchId: string) => Promise<{ softDeleted: boolean }>;
 
   // Product Domain Methods
   getAllProducts: (includeInactive?: boolean) => Promise<Product[]>;
@@ -184,15 +222,21 @@ export interface AlumfabAPI {
   createSale: (data: {
     branchId: string;
     customerId?: string;
-    items: { productId: string; quantityDecimal: number; rateRupees?: number }[];
+    items: { productId: string; quantityDecimal: number; rateRupees?: number; discountRupees?: number }[];
     discountType?: DiscountType;
     discountValueBasisPoints?: number;
     discountRupees?: number;
     discountNote?: string;
     paymentMethod?: PaymentMethod;
+    paymentAmountRupees?: number;
     chequeNumber?: string;
     chequeBank?: string;
     chequeDate?: Date;
+    payments?: {
+      method: PaymentMethod;
+      amountRupees: number;
+      chequeNumber?: string;
+    }[];
   }) => Promise<Sale>;
   getAllSales: (branchId?: string) => Promise<Sale[]>;
 
@@ -249,4 +293,54 @@ export interface AlumfabAPI {
   runImportDryRun: (filePath: string) => Promise<ImportDryRunResult>;
   /** Commit: write validated rows to DB in a single transaction using chosen conflict strategy */
   commitImport: (dryRunResult: ImportDryRunResult, conflictStrategy: ConflictStrategy) => Promise<ImportCommitResult>;
+
+  /** Direct silent printing of compiled HTML content to default printer or named device */
+  printSilent: (htmlContent: string, options?: { silent?: boolean; deviceName?: string }) => Promise<boolean>;
+
+  /**
+   * Renders an invoice HTML document to PDF and prompts the operator with a
+   * native Save dialog. Resolves with the chosen path, or `canceled: true`
+   * if the operator dismissed the dialog without saving.
+   */
+  downloadInvoicePdf: (
+    htmlContent: string,
+    suggestedFileName: string
+  ) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>;
+
+  // History, Returns, and Voids Methods
+  getSalesHistory: (filters: SalesHistoryFilters) => Promise<{ sales: Sale[]; totalCount: number }>;
+  processReturn: (data: ProcessReturnInput) => Promise<SalesReturn>;
+  voidSale: (data: ProcessVoidInput) => Promise<VoidAuditLog>;
+
+  // Shift and Reconciliation Methods
+  openShift: (branchId: string, cashierId: string, startingFloatRupees: number) => Promise<CashShift>;
+  getOpenShift: (branchId: string, cashierId: string) => Promise<CashShift | null>;
+  closeShift: (data: CloseShiftInput) => Promise<CashShift>;
+
+  // Analytics Reports Methods
+  getSalesSummary: (branchId: string, filters: DateRangeFilters) => Promise<{ grossSales: number; discounts: number; netSales: number; taxesCollected: number; salesCount: number }>;
+  getTaxLiabilityReport: (branchId: string, filters: DateRangeFilters) => Promise<any[]>;
+  getTopSellingProducts: (branchId: string, limit?: number) => Promise<any[]>;
+  getProfitMarginAnalysis: (branchId: string, filters: DateRangeFilters) => Promise<{ revenue: number; cogs: number; grossProfit: number; profitMarginPercent: number }>;
+
+  // Backup and Disaster Recovery Methods
+  triggerBackup: (backupType?: 'MANUAL' | 'AUTOMATIC') => Promise<BackupMetadata>;
+  listBackups: () => Promise<BackupMetadata[]>;
+  restoreBackup: (backupId: string) => Promise<boolean>;
+
+  // Auto-Updater Methods
+  /** Force a feed check now (Settings > Updates). Resolves with the new state. */
+  checkForUpdates: () => Promise<UpdateState>;
+  /** Current updater snapshot — safe to call on mount. */
+  getUpdateState: () => Promise<UpdateState>;
+  /**
+   * Restart and apply a staged update. Call ONLY after confirming the cart is
+   * empty and no cash shift is open. Resolves false when nothing is staged.
+   */
+  installUpdateNow: () => Promise<boolean>;
+  /**
+   * Subscribe to updater state pushes. Returns an unsubscribe function; call it
+   * from your effect cleanup or you will leak a listener per remount.
+   */
+  onUpdateEvent: (callback: (state: UpdateState) => void) => () => void;
 }

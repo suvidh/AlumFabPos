@@ -26,14 +26,101 @@ export interface UpdateBranchInput {
 export class BranchService {
   public static async getAllBranches(prisma: PrismaClient): Promise<Branch[]> {
     return prisma.branch.findMany({
+      where: { isDeleted: false },
       orderBy: { createdAt: 'asc' }
     });
   }
 
   public static async getBranchById(prisma: PrismaClient, branchId: string): Promise<Branch | null> {
-    return prisma.branch.findUnique({
-      where: { id: branchId }
+    return prisma.branch.findFirst({
+      where: { id: branchId, isDeleted: false }
     });
+  }
+
+  public static async deleteBranch(prisma: PrismaClient, branchId: string): Promise<{ softDeleted: boolean }> {
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      include: { company: true }
+    });
+    if (!branch) throw new Error(`Branch ${branchId} not found`);
+
+    // Minimum Active Branch Constraint
+    const activeBranchesCount = await prisma.branch.count({ where: { isDeleted: false } });
+    if (activeBranchesCount <= 1) {
+      throw new Error("At least one branch must remain active in the system.");
+    }
+
+    // Re-assign default branch if HQ is deleted
+    if (branch.company.defaultBranchId === branch.id) {
+      const nextHQ = await prisma.branch.findFirst({
+        where: { id: { not: branchId }, isDeleted: false }
+      });
+      if (nextHQ) {
+        await prisma.company.update({
+          where: { id: branch.company.id },
+          data: { defaultBranchId: nextHQ.id }
+        });
+      }
+    }
+
+    // Check for dependent data: Sales Invoices, Active Inventory, or Customer Records
+    const salesCount = await prisma.sale.count({ where: { branchId } });
+    const inventoryCount = await prisma.branchInventory.count({ where: { branchId, quantityMilli: { gt: 0 } } });
+    const customerCount = await prisma.customer.count({ where: { defaultBranchId: branchId } });
+    const purchaseCount = await prisma.purchase.count({ where: { branchId } });
+    const expenseCount = await prisma.expense.count({ where: { branchId } });
+
+    const hasDependencies = salesCount > 0 || inventoryCount > 0 || customerCount > 0 || purchaseCount > 0 || expenseCount > 0;
+
+    if (hasDependencies) {
+      // Soft Delete
+      await prisma.branch.update({
+        where: { id: branchId },
+        data: { isDeleted: true, isActive: false }
+      });
+      await prisma.auditLog.create({
+        data: {
+          action: 'BRANCH_SOFT_DELETED',
+          entityType: 'Branch',
+          entityId: branchId,
+          detailsJson: JSON.stringify({ name: branch.name, code: branch.code, reason: 'has_dependencies' })
+        }
+      });
+      return { softDeleted: true };
+    } else {
+      // Hard Delete
+      try {
+        await prisma.invoiceSequence.deleteMany({ where: { branchId } });
+        await prisma.branchInventory.deleteMany({ where: { branchId } });
+        await prisma.productBranchBarcode.deleteMany({ where: { branchId } });
+        await prisma.branch.delete({ where: { id: branchId } });
+
+        await prisma.auditLog.create({
+          data: {
+            action: 'BRANCH_HARD_DELETED',
+            entityType: 'Branch',
+            entityId: branchId,
+            detailsJson: JSON.stringify({ name: branch.name, code: branch.code })
+          }
+        });
+        return { softDeleted: false };
+      } catch (err: any) {
+        // Fallback to soft delete if key constraints hit
+        await prisma.branch.update({
+          where: { id: branchId },
+          data: { isDeleted: true, isActive: false }
+        });
+        await prisma.auditLog.create({
+          data: {
+            action: 'BRANCH_SOFT_DELETED',
+            entityType: 'Branch',
+            entityId: branchId,
+            detailsJson: JSON.stringify({ name: branch.name, code: branch.code, reason: 'fk_constraint_fallback', error: err.message })
+          }
+        });
+        return { softDeleted: true };
+      }
+    }
   }
 
   public static async createBranch(prisma: PrismaClient, input: CreateBranchInput): Promise<Branch> {
@@ -144,5 +231,40 @@ export class BranchService {
     } else {
       return run(prisma);
     }
+  }
+
+  public static async getActiveBranch(prisma?: PrismaClient): Promise<Branch | null> {
+    if (!prisma) {
+      if (typeof window !== 'undefined') {
+        const boundId = localStorage.getItem('boundBranchId');
+        if (boundId) {
+          const b = await (window as any).alumfab?.getBranchById(boundId);
+          if (b) return b;
+        }
+        const branches = await (window as any).alumfab?.getAllBranches();
+        if (branches && branches.length > 0) {
+          // Find default headquarters first, otherwise first active branch
+          const companyInfo = await (window as any).alumfab?.getCompany();
+          const defaultBranchId = companyInfo?.company?.defaultBranchId;
+          const mainBranch = branches.find((br: any) => br.id === defaultBranchId);
+          return mainBranch || branches[0];
+        }
+      }
+      return null;
+    }
+
+    const company = await prisma.company.findFirst();
+    if (company && company.defaultBranchId) {
+      const defaultBranch = await prisma.branch.findUnique({
+        where: { id: company.defaultBranchId }
+      });
+      if (defaultBranch && !defaultBranch.isDeleted) {
+        return defaultBranch;
+      }
+    }
+    return prisma.branch.findFirst({
+      where: { isDeleted: false, isActive: true },
+      orderBy: { createdAt: 'asc' }
+    });
   }
 }

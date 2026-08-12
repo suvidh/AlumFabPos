@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, Customer, DiscountType, PaymentMethod } from '@prisma/client';
 import QRCode from 'qrcode';
+import { usePOSConfigStore } from '../context/POSConfigStore';
 import {
   ShoppingCart, Search, Trash2, X, CheckCircle, AlertCircle,
   User, CreditCard, Banknote, Tag, RefreshCw, Keyboard, ChevronDown, QrCode
@@ -44,9 +45,10 @@ const HotkeyBadge: React.FC<{ label: string }> = ({ label }) => (
 export const BillingPage: React.FC = () => {
 
   // Data
+  const { activeBoundBranch } = usePOSConfigStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [defaultBranchId, setDefaultBranchId] = useState<string>('');
+  const defaultBranchId = activeBoundBranch?.id || '';
 
   // Product Search (F2)
   const [searchQuery, setSearchQuery] = useState('');
@@ -81,14 +83,12 @@ export const BillingPage: React.FC = () => {
     const load = async () => {
       if (!window.alumfab) return;
       try {
-        const [prods, custs, { company, defaultBranch }] = await Promise.all([
+        const [prods, custs] = await Promise.all([
           window.alumfab.getAllProducts(false),
-          window.alumfab.getAllCustomers(),
-          window.alumfab.getCompany()
+          window.alumfab.getAllCustomers()
         ]);
         setProducts(prods);
         setCustomers(custs);
-        if (defaultBranch) setDefaultBranchId(defaultBranch.id);
       } catch (e) {
         console.error('Billing load error:', e);
       }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   LayoutDashboard, ShoppingCart, Package, Layers, 
-  Users, FileText, BarChart3, Settings, ShieldCheck, Cpu, UserCheck
+  Users, FileText, BarChart3, Settings, ShieldCheck, Cpu, UserCheck, Building2
 } from 'lucide-react';
 import { DashboardPage } from '../pages/DashboardPage';
 import { BillingPage } from '../pages/BillingPage';
@@ -12,12 +12,14 @@ import { SalesPage } from '../pages/SalesPage';
 import { ReportsPage } from '../pages/ReportsPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { useUser } from '../context/UserContext';
+import { usePOSConfigStore } from '../context/POSConfigStore';
 
 export type NavTab = 'dashboard' | 'billing' | 'products' | 'inventory' | 'customers' | 'sales' | 'reports' | 'settings';
 
 export const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const { user } = useUser();
+  const { activeBoundBranch } = usePOSConfigStore();
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -88,7 +90,26 @@ export const MainLayout: React.FC = () => {
           </nav>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {/* Bound Branch Status Pill */}
+          <div style={{
+            backgroundColor: '#0f172a',
+            border: '1px solid #334155',
+            borderRadius: '6px',
+            padding: '0.65rem',
+            fontSize: '0.75rem',
+            color: '#cbd5e1',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <Building2 style={{ width: 16, height: 16, color: '#10b981' }} />
+            <div>
+              <div style={{ fontWeight: 600, color: '#f8fafc' }}>{activeBoundBranch ? activeBoundBranch.branchName : 'No Branch Bound'}</div>
+              <div style={{ fontSize: '0.68rem', color: '#10b981', textTransform: 'uppercase' }}>Bound Branch ({activeBoundBranch?.branchCode || 'N/A'})</div>
+            </div>
+          </div>
+
           {/* Operator Info Pill */}
           <div style={{
             backgroundColor: '#0f172a',

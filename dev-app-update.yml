@@ -1,0 +1,26 @@
+# =============================================================================
+#  Development-only update feed
+# =============================================================================
+#  electron-updater refuses to run in an unpackaged app. UpdaterService looks
+#  for this file and, when present, sets `forceDevUpdateConfig` so you can
+#  exercise the whole check -> download -> stage -> restart flow with
+#  `npm run dev`, without cutting a real release.
+#
+#  Local test loop:
+#
+#    1. Bump version in package.json to something ahead of what you run,
+#       e.g. you run 1.0.0 and publish 1.0.1.
+#    2. npm run dist:win
+#    3. Serve the release folder:
+#         npx http-server ./release -p 8000 --cors
+#    4. Point the url below at http://127.0.0.1:8000/
+#    5. npm run dev  ->  watch the log for "[Updater] Development feed active"
+#
+#  This file is NOT shipped: electron-builder writes its own app-update.yml
+#  into resources/ from the `publish:` block in electron-builder.yml.
+# =============================================================================
+
+provider: generic
+url: http://127.0.0.1:8000/
+channel: latest
+updaterCacheDirName: alumfab-pos-updater

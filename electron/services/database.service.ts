@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { AppPathsService } from '../main/app-paths';
 import { LoggerService } from './logger.service';
+import { SchemaGuard } from './schema-guard.service';
 import { DatabaseHealthResult } from '../ipc/contracts';
 import { CompanyService } from '../../src/services/companyService';
 import { ProductService } from '../../src/services/productService';
@@ -14,12 +15,70 @@ import { SupplierService } from '../../src/services/supplierService';
 export class DatabaseService {
   private static instance: PrismaClient | null = null;
   private static isInitialized = false;
+  private static engineResolved = false;
+
+  /**
+   * Set when the schema guard refuses to start. Surfaced verbatim to the
+   * operator so a technician gets the diagnosis instead of "something failed".
+   */
+  private static fatalSchemaMessage: string | null = null;
+
+  /** Non-null when bootstrap was aborted by incompatible schema drift. */
+  public static getFatalSchemaMessage(): string | null {
+    return this.fatalSchemaMessage;
+  }
+
+  /**
+   * Point Prisma at the query engine inside app.asar.unpacked.
+   *
+   * PACKAGING NOTE — this is the single most common way an Electron + Prisma
+   * build dies in production. `query_engine-windows.dll.node` is a native
+   * addon: it must be dlopen()'d from a real path on disk, and nothing can be
+   * loaded from inside an asar archive. electron-builder.yml lists
+   * `node_modules/.prisma/**` under `asarUnpack`, which mirrors the engine to
+   *
+   *   resources\app.asar.unpacked\node_modules\.prisma\client\
+   *
+   * Prisma's own resolver still looks next to the asar-packed client and
+   * fails, so we set PRISMA_QUERY_ENGINE_LIBRARY explicitly. In dev this is a
+   * no-op and the normal node_modules resolution applies.
+   */
+  private static resolveQueryEngine(): void {
+    if (this.engineResolved) return;
+    this.engineResolved = true;
+
+    if (!app.isPackaged) return;
+
+    const engineName = 'query_engine-windows.dll.node';
+    const unpacked = path.join(
+      process.resourcesPath,
+      'app.asar.unpacked',
+      'node_modules',
+      '.prisma',
+      'client',
+      engineName
+    );
+
+    if (fs.existsSync(unpacked)) {
+      process.env.PRISMA_QUERY_ENGINE_LIBRARY = unpacked;
+      // Schema copy sits beside the engine; some Prisma code paths look for it.
+      process.env.PRISMA_SCHEMA_PATH = path.join(path.dirname(unpacked), 'schema.prisma');
+      LoggerService.info(`Prisma query engine resolved: ${unpacked}`);
+    } else {
+      LoggerService.error(
+        `Prisma query engine NOT FOUND at ${unpacked}. ` +
+        'Check the asarUnpack globs in electron-builder.yml — the app will fail to reach the database.'
+      );
+    }
+  }
 
   /**
    * Get singleton PrismaClient connected to %APPDATA%\ALUMFAB-POS\database\pos.db
    */
   public static getClient(): PrismaClient {
     if (!this.instance) {
+      this.resolveQueryEngine();
+
       const paths = AppPathsService.getPaths();
       const dbPath = paths.databaseFile;
 
@@ -75,6 +134,38 @@ export class DatabaseService {
 
       const client = this.getClient();
       await client.$connect();
+
+      // ── Schema drift guard ─────────────────────────────────────────────
+      // MUST run before any model query. The database above is whatever the
+      // shop already had — the template is only copied when the file is
+      // absent, so a terminal that has been selling since an earlier release
+      // can be missing columns this build expects.
+      //
+      // Discovering that lazily is what produced the bulk-import failure:
+      // Prisma reads every model column back after a write, so
+      // `product.update()` threw P2022 on `costPricePaise` and rolled back the
+      // entire ODS ingestion transaction. Additive gaps are closed here, under
+      // a backup, before a single row is touched.
+      // appPath / resourcesPath let the guard find the recorded DDL in
+      // prisma/migrations (dev) or resources/migrations (packaged), which is
+      // what lets it create whole missing tables instead of refusing.
+      const guard = await SchemaGuard.ensureCompatible(client, paths.databaseFile, paths.backupDir, {
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath
+      });
+
+      if (!guard.safeToProceed) {
+        this.fatalSchemaMessage = guard.fatalMessage;
+        this.isInitialized = false;
+        LoggerService.error('Database bootstrap aborted by the schema guard.');
+        return false;
+      }
+
+      if (guard.repaired) {
+        LoggerService.info(
+          `Database schema repaired during startup (snapshot: ${guard.backupPath}). Continuing bootstrap.`
+        );
+      }
 
       // Ensure AppMeta row exists
       let meta = await client.appMeta.findUnique({ where: { id: 1 } });

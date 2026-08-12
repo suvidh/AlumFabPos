@@ -11,21 +11,31 @@ export class CompanyService {
 
     if (!company) {
       // Seed default Single Company Profile
+      //
+      // Registered business details below are taken directly from the ALUMFAB
+      // dealer letterhead / delivery challan — this is a single-tenant app
+      // built for this business, so the real GSTIN/phone/address are the
+      // correct defaults rather than placeholders to fill in later. They can
+      // still be edited from Settings if they ever change.
       company = await prisma.company.create({
         data: {
           name: 'ALUMFAB Bulk Aluminium Hardware',
           legalName: 'ALUMFAB Hardware & Aluminium Pvt Ltd',
-          taxId: undefined, // Leave blank during initial setup per Section 13
-          phone: undefined,
-          email: undefined,
-          state: undefined,
-          address: undefined,
+          taxId: '24ABOPK8064H1ZD', // GSTIN
+          phone: '9824157960',
+          email: 'teamalumfab@gmail.com',
+          state: 'Gujarat',
+          address: 'Shop No. 2, Kalindi Apartment, Nr. Sharda Hospital Circle, Majura Gate Road, Surat - 395002',
           isActive: true,
           branches: {
             create: {
               code: 'MAIN',
               name: 'Main Head Office & Central Depot',
               invoicePrefix: 'INV-MAIN-',
+              address: 'Shop No. 2, Kalindi Apartment, Nr. Sharda Hospital Circle, Majura Gate Road, Surat - 395002',
+              gstin: '24ABOPK8064H1ZD',
+              phone: '9824157960',
+              state: 'Gujarat',
               isActive: true
             }
           }
